@@ -420,6 +420,7 @@ function startGame(m){
   $('combo-display').textContent='';
   inp.value='';
   showScreen('game');
+  window.scrollTo(0, 0);
   inp.focus(); // タップ同期コンテキスト内
   countdown(3);
 }
