@@ -421,7 +421,6 @@ function startGame(m){
   inp.value='';
   showScreen('game');
   window.scrollTo(0, 0);
-  inp.focus(); // タップ同期コンテキスト内
   countdown(3);
 }
 
@@ -442,7 +441,6 @@ function beginPlay(){
   state.running=true;
   state.endTime=Date.now()+GAME_TIME*1000;
   nextWord();
-  inp.focus();
   state.timerId=setInterval(tick,200);
 }
 
