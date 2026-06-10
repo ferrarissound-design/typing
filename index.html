@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>フリック道場</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root {
+    --sumi:#16130f;        /* 墨 */
+    --washi:#ece5d3;       /* 和紙 */
+    --shu:#c73e3a;         /* 朱 */
+    --kin:#c9a227;         /* 金 */
+    --usuzumi:#9a9183;     /* 薄墨 */
+  }
+  body {
+    font-family:"Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif;
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(255,255,255,0.04), transparent 50%),
+      radial-gradient(ellipse at 80% 90%, rgba(199,62,58,0.06), transparent 50%),
+      var(--sumi);
+    color:var(--washi); min-height:100vh; min-height:100dvh;
+    display:flex; flex-direction:column; align-items:center;
+    overflow-x:hidden;
+  }
+  .container { width:100%; max-width:480px; padding:20px 16px; flex:1; display:flex; flex-direction:column; }
+
+  /* ===== 看板 ===== */
+  .kanban {
+    text-align:center; margin-bottom:6px; position:relative;
+  }
+  .kanban h1 {
+    font-size:34px; font-weight:900; letter-spacing:10px; padding-left:10px;
+    color:var(--washi);
+    text-shadow:0 0 24px rgba(236,229,211,0.15);
+  }
+  .kanban .hanko {
+    display:inline-block; margin-top:6px;
+    border:2px solid var(--shu); color:var(--shu);
+    font-size:11px; letter-spacing:4px; padding:3px 10px 3px 14px;
+    border-radius:4px;
+  }
+  .subtitle { text-align:center; color:var(--usuzumi); font-size:12px; margin:10px 0 22px; letter-spacing:2px; }
+
+  .screen { display:none; flex:1; flex-direction:column; }
+  .screen.active { display:flex; }
+
+  /* ===== 木札メニュー ===== */
+  .mode-card {
+    background:linear-gradient(135deg, rgba(236,229,211,0.07), rgba(236,229,211,0.03));
+    border:1px solid rgba(236,229,211,0.18);
+    border-left:5px solid var(--shu);
+    border-radius:4px; padding:18px 16px; margin-bottom:14px;
+    cursor:pointer; transition:transform .15s, background .15s;
+    position:relative;
+  }
+  .mode-card:active { transform:scale(0.97); background:rgba(236,229,211,0.12); }
+  .mode-card .mode-title { font-size:19px; font-weight:800; margin-bottom:4px; letter-spacing:2px; }
+  .mode-card .mode-desc { font-size:12px; color:var(--usuzumi); letter-spacing:1px; }
+  .mode-card .emoji { margin-right:8px; }
+  .best-label { font-size:11px; color:var(--kin); margin-top:8px; letter-spacing:1px; }
+
+  /* ===== 道場(ゲーム画面) ===== */
+  .hud { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:13px; flex-wrap:wrap; gap:6px; }
+  .hud .stat {
+    background:rgba(236,229,211,0.06); border:1px solid rgba(236,229,211,0.15);
+    padding:5px 12px; border-radius:3px; font-weight:700; letter-spacing:1px;
+  }
+  .stat.miss-stat { color:#e06c6c; }
+  .timer-bar-wrap { width:100%; height:6px; background:rgba(236,229,211,0.1); margin-bottom:22px; overflow:hidden; }
+  .timer-bar { height:100%; width:100%; background:var(--washi); transition:width .2s linear; }
+  .timer-bar.danger { background:var(--shu); }
+
+  .word-area { text-align:center; margin-bottom:8px; min-height:120px; display:flex; flex-direction:column; justify-content:center; position:relative; }
+  .word-meaning { font-size:14px; color:var(--usuzumi); margin-bottom:12px; min-height:20px; letter-spacing:3px; }
+  .word-display { font-size:34px; font-weight:900; letter-spacing:5px; line-height:1.5; word-break:break-all; }
+  .word-display .done { color:var(--shu); }
+  .word-display .rest { color:var(--washi); }
+  .word-display .wrong-flash { color:#e06c6c; text-decoration:underline wavy #e06c6c 2px; }
+
+  .combo { text-align:center; font-size:15px; color:var(--kin); font-weight:800; min-height:24px; margin-bottom:8px; letter-spacing:3px; }
+  .combo .big { font-size:20px; }
+
+  input.flick-input {
+    width:100%; padding:16px; font-size:22px; border-radius:3px;
+    border:1px solid rgba(236,229,211,0.3); border-bottom:3px solid var(--shu);
+    background:rgba(0,0,0,0.45);
+    color:var(--washi); text-align:center; outline:none;
+    font-family:inherit;
+  }
+  input.flick-input:focus { box-shadow:0 4px 20px rgba(199,62,58,0.25); }
+  input.flick-input.miss-shake {
+    animation:missShake .32s ease; border-bottom-color:#e06c6c;
+    box-shadow:0 0 24px rgba(224,108,108,0.5);
+  }
+  @keyframes missShake {
+    0%,100%{transform:translateX(0);}
+    20%{transform:translateX(-7px);}
+    40%{transform:translateX(6px);}
+    60%{transform:translateX(-4px);}
+    80%{transform:translateX(3px);}
+  }
+  /* 喝! */
+  .katsu {
+    position:fixed; left:50%; top:24%; transform:translate(-50%,-50%) scale(0);
+    font-size:46px; font-weight:900; color:#e06c6c; pointer-events:none; opacity:0;
+    z-index:42; letter-spacing:4px; font-family:inherit;
+    text-shadow:0 2px 16px rgba(0,0,0,.8);
+  }
+  .katsu.show { animation:katsuPop .5s ease-out; }
+  @keyframes katsuPop {
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.4) rotate(-8deg);}
+    35%{opacity:1;transform:translate(-50%,-50%) scale(1.2) rotate(4deg);}
+    100%{opacity:0;transform:translate(-50%,-50%) scale(1) rotate(0);}
+  }
+  .hint { text-align:center; font-size:11px; color:var(--usuzumi); margin-top:10px; letter-spacing:1px; }
+
+  /* ===== 墨はね&判定 ===== */
+  .ink-splash {
+    position:fixed; left:50%; top:30%; width:140px; height:140px;
+    transform:translate(-50%,-50%) scale(0); pointer-events:none; z-index:40;
+    background:radial-gradient(circle at 45% 45%, rgba(236,229,211,0.9) 0%, rgba(236,229,211,0.5) 30%, transparent 60%),
+               radial-gradient(circle at 70% 30%, rgba(236,229,211,0.6) 0%, transparent 25%),
+               radial-gradient(circle at 25% 70%, rgba(236,229,211,0.6) 0%, transparent 22%);
+    border-radius:46% 54% 60% 40% / 50% 42% 58% 50%;
+    opacity:0;
+  }
+  .ink-splash.show { animation:inkPop .55s ease-out; }
+  .ink-splash.ippon {
+    background:radial-gradient(circle at 45% 45%, rgba(199,62,58,0.95) 0%, rgba(199,62,58,0.5) 32%, transparent 60%),
+               radial-gradient(circle at 72% 28%, rgba(199,62,58,0.7) 0%, transparent 26%),
+               radial-gradient(circle at 22% 72%, rgba(199,62,58,0.7) 0%, transparent 24%);
+  }
+  @keyframes inkPop {
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.2) rotate(-12deg);}
+    30%{opacity:1;transform:translate(-50%,-50%) scale(1.1) rotate(4deg);}
+    100%{opacity:0;transform:translate(-50%,-50%) scale(1.5) rotate(10deg);}
+  }
+  .feedback-pop {
+    position:fixed; left:50%; top:30%; transform:translate(-50%,-50%);
+    font-size:34px; font-weight:900; pointer-events:none; opacity:0; z-index:41;
+    letter-spacing:6px; text-shadow:0 2px 12px rgba(0,0,0,.7);
+    font-family:inherit;
+  }
+  .feedback-pop.show { animation:pop .6s ease-out; }
+  @keyframes pop {
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.5);}
+    30%{opacity:1;transform:translate(-50%,-58%) scale(1.15);}
+    100%{opacity:0;transform:translate(-50%,-85%) scale(1);}
+  }
+
+  /* ===== 結果(免状) ===== */
+  .menjo {
+    border:1px solid rgba(236,229,211,0.25);
+    outline:1px solid rgba(236,229,211,0.1); outline-offset:4px;
+    padding:18px 14px; margin-bottom:6px;
+  }
+  .rank-display { text-align:center; margin:8px 0 4px; }
+  .rank-display .rank-cap { font-size:12px; color:var(--usuzumi); letter-spacing:6px; }
+  .rank-name {
+    font-size:52px; font-weight:900; letter-spacing:8px; padding-left:8px;
+    animation:rankIn .5s cubic-bezier(.34,1.56,.64,1); display:inline-block; margin:4px 0;
+  }
+  @keyframes rankIn { from{transform:scale(0) rotate(-8deg);opacity:0;} to{transform:scale(1) rotate(0);opacity:1;} }
+  .belt-bar {
+    width:80%; height:18px; margin:6px auto 12px; position:relative;
+    border-radius:2px; box-shadow:0 2px 8px rgba(0,0,0,.5);
+  }
+  .belt-bar::after { /* 帯の結び目風 */
+    content:""; position:absolute; left:50%; top:-4px; transform:translateX(-50%);
+    width:26px; height:26px; background:inherit; border-radius:3px;
+    box-shadow:0 2px 6px rgba(0,0,0,.5);
+  }
+  .new-record { text-align:center; color:var(--kin); font-weight:800; font-size:14px; margin-bottom:8px; letter-spacing:2px; animation:blink 1s infinite; }
+  @keyframes blink { 50%{opacity:.4;} }
+  .result-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0; }
+  .result-grid.three { grid-template-columns:1fr 1fr 1fr; }
+  .result-item { background:rgba(236,229,211,0.05); border:1px solid rgba(236,229,211,0.12); border-radius:3px; padding:12px; text-align:center; }
+  .result-item .label { font-size:10px; color:var(--usuzumi); margin-bottom:4px; letter-spacing:1px; }
+  .result-item .value { font-size:20px; font-weight:800; }
+  .result-item.highlight { border-color:rgba(201,162,39,0.5); background:rgba(201,162,39,0.07); }
+  .acc-bar-wrap { width:100%; height:10px; background:rgba(236,229,211,0.08); overflow:hidden; margin:4px 0 12px; }
+  .acc-bar { height:100%; transition:width .8s ease; }
+
+  /* ===== 黒帯(師範代)特別演出 ===== */
+  .menjo.kuroobi {
+    border-color:rgba(201,162,39,0.7);
+    outline-color:rgba(201,162,39,0.4);
+    box-shadow:0 0 40px rgba(201,162,39,0.25), inset 0 0 30px rgba(201,162,39,0.06);
+    animation:menjoGlow 2.4s ease-in-out infinite;
+  }
+  @keyframes menjoGlow {
+    50%{ box-shadow:0 0 60px rgba(201,162,39,0.45), inset 0 0 40px rgba(201,162,39,0.1); }
+  }
+  .kuroobi .rank-name {
+    color:#c9a227 !important;
+    text-shadow:0 0 18px rgba(201,162,39,0.9), 0 0 36px rgba(201,162,39,0.5);
+    animation:kuroobiPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes kuroobiPulse { 50%{ text-shadow:0 0 28px rgba(201,162,39,1), 0 0 56px rgba(201,162,39,0.7); } }
+  .kuroobi .belt-bar {
+    background:linear-gradient(90deg,#1a1a1a,#000,#1a1a1a) !important;
+    border:1px solid rgba(201,162,39,0.6);
+    box-shadow:0 0 16px rgba(201,162,39,0.5);
+  }
+  .kuroobi .belt-bar::after {
+    border:1px solid rgba(201,162,39,0.6);
+    box-shadow:0 0 12px rgba(201,162,39,0.6);
+  }
+  .kuroobi .rank-cap { color:#c9a227; }
+  .shihan-seal {
+    display:none; text-align:center; color:#c9a227; font-size:13px;
+    letter-spacing:6px; margin-top:6px; font-weight:800;
+    text-shadow:0 0 12px rgba(201,162,39,0.6);
+  }
+  .kuroobi .shihan-seal { display:block; animation:blink 1.4s infinite; }
+
+  .btn {
+    display:block; width:100%; padding:14px; border:none; border-radius:3px;
+    font-size:16px; font-weight:800; cursor:pointer; margin-top:8px;
+    background:var(--shu); color:var(--washi); letter-spacing:4px;
+    font-family:inherit; transition:transform .15s;
+  }
+  .btn:active { transform:scale(0.97); }
+  .btn.secondary { background:rgba(236,229,211,0.1); border:1px solid rgba(236,229,211,0.2); }
+
+  /* ===== カウントダウン ===== */
+  .countdown-overlay {
+    position:fixed; inset:0; background:rgba(22,19,15,0.6); display:none;
+    align-items:flex-start; justify-content:center; z-index:50; padding-top:16vh;
+  }
+  .countdown-overlay.show { display:flex; }
+  .countdown-num {
+    font-size:84px; font-weight:900; color:var(--washi);
+    animation:cdPop .9s ease-out; text-shadow:0 4px 24px rgba(0,0,0,.7);
+    letter-spacing:4px; font-family:inherit;
+  }
+  .countdown-num.hajime { color:var(--shu); }
+  @keyframes cdPop { 0%{transform:scale(1.6);opacity:0;} 30%{transform:scale(1);opacity:1;} 100%{opacity:.9;} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="kanban">
+    <h1>フリック道場</h1>
+    <div class="hanko">入門無料</div>
+  </div>
+  <div class="subtitle">— 指先、これ修行なり —</div>
+
+  <!-- MENU -->
+  <div class="screen active" id="screen-menu">
+    <div class="mode-card" onclick="startGame('normal')">
+      <div class="mode-title"><span class="emoji">⚡</span>速打の型 〔六十秒〕</div>
+      <div class="mode-desc">日常単語を打ちまくる基本稽古</div>
+      <div class="best-label" id="best-normal"></div>
+    </div>
+    <div class="mode-card" onclick="startGame('long')">
+      <div class="mode-title"><span class="emoji">📜</span>長文の型 〔六十秒〕</div>
+      <div class="mode-desc">長きフレーズにて持久を鍛える</div>
+      <div class="best-label" id="best-long"></div>
+    </div>
+    <div class="mode-card" onclick="startGame('keitai')">
+      <div class="mode-title"><span class="emoji">📱</span>携帯用語の型 〔六十秒〕</div>
+      <div class="mode-desc">携帯ショップ用語の実戦稽古。仕事に効く!?</div>
+      <div class="best-label" id="best-keitai"></div>
+    </div>
+    <div class="hint">ひらがなのまま入力すればOK。漢字変換は不要</div>
+  </div>
+
+  <!-- GAME -->
+  <div class="screen" id="screen-game">
+    <div class="hud">
+      <div class="stat">⏱ <span id="time-left">60</span></div>
+      <div class="stat">点 <span id="score">0</span></div>
+      <div class="stat">語 <span id="word-count">0</span></div>
+      <div class="stat miss-stat">誤 <span id="miss-count">0</span></div>
+    </div>
+    <div class="timer-bar-wrap"><div class="timer-bar" id="timer-bar"></div></div>
+    <div class="word-area">
+      <div class="word-meaning" id="word-meaning"></div>
+      <div class="word-display" id="word-display"></div>
+    </div>
+    <div class="combo" id="combo-display"></div>
+    <input type="text" class="flick-input" id="flick-input" placeholder="ここに入力"
+      autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <div class="hint">単語が合えば自動で次へ進む</div>
+    <button class="btn secondary" onclick="quitGame()" style="margin-top:auto;">退　場</button>
+  </div>
+
+  <!-- RESULT -->
+  <div class="screen" id="screen-result">
+    <div class="menjo" id="menjo">
+      <div class="rank-display">
+        <div class="rank-cap">段　位　認　定</div>
+        <div class="rank-name" id="rank-name">茶帯</div>
+        <div class="belt-bar" id="belt-bar"></div>
+        <div class="shihan-seal" id="shihan-seal">免許皆伝</div>
+      </div>
+      <div class="new-record" id="new-record" style="display:none;">🏮 自己ベスト更新!</div>
+      <div class="result-grid">
+        <div class="result-item highlight"><div class="label">最終スコア</div><div class="value" id="r-score">0</div></div>
+        <div class="result-item"><div class="label">素点 × 正確率</div><div class="value" id="r-breakdown" style="font-size:14px;">0 × 100%</div></div>
+        <div class="result-item"><div class="label">入力した単語</div><div class="value" id="r-words">0</div></div>
+        <div class="result-item"><div class="label">最大連撃</div><div class="value" id="r-combo">0</div></div>
+      </div>
+      <div class="result-grid three">
+        <div class="result-item"><div class="label">正確率</div><div class="value" id="r-acc">-</div></div>
+        <div class="result-item"><div class="label">かな/秒</div><div class="value" id="r-kps">0</div></div>
+        <div class="result-item"><div class="label">ミス数</div><div class="value" id="r-miss" style="color:#e06c6c;">0</div></div>
+      </div>
+      <div class="acc-bar-wrap"><div class="acc-bar" id="acc-bar"></div></div>
+      <div style="text-align:center;font-size:13px;color:var(--usuzumi);letter-spacing:1px;" id="rank-comment"></div>
+    </div>
+    <button class="btn" onclick="retry()">もう一本!</button>
+    <button class="btn secondary" onclick="toMenu()">道場入口へ</button>
+  </div>
+</div>
+
+<div class="ink-splash" id="ink-splash"></div>
+<div class="feedback-pop" id="feedback-pop"></div>
+<div class="katsu" id="katsu">喝!</div>
+<div class="countdown-overlay" id="countdown-overlay"><div class="countdown-num" id="countdown-num">参</div></div>
+
+<script>
+const WORDS = {
+  normal: [
+    ["さくら","桜"],["でんしゃ","電車"],["おにぎり","おにぎり"],["かばん","鞄"],["てんき","天気"],
+    ["やきゅう","野球"],["こうえん","公園"],["しんぶん","新聞"],["たまご","卵"],["みかん","みかん"],
+    ["ぎゅうにゅう","牛乳"],["がっこう","学校"],["しゅくだい","宿題"],["れいぞうこ","冷蔵庫"],["せんたく","洗濯"],
+    ["ひこうき","飛行機"],["ちかてつ","地下鉄"],["おんがく","音楽"],["えいが","映画"],["りょこう","旅行"],
+    ["やさい","野菜"],["くだもの","果物"],["びょういん","病院"],["ぎんこう","銀行"],["ゆうびんきょく","郵便局"],
+    ["かぞく","家族"],["ともだち","友達"],["しごと","仕事"],["やすみ","休み"],["あさごはん","朝ごはん"],
+    ["ばんごはん","晩ごはん"],["おふろ","お風呂"],["はみがき","歯磨き"],["めざまし","目覚まし"],["でんわ","電話"],
+    ["じゅうたく","住宅"],["かいぎ","会議"],["しゅっちょう","出張"],["きゅうりょう","給料"],["ざんぎょう","残業"],
+    ["こども","子供"],["せんせい","先生"],["びじゅつかん","美術館"],["どうぶつえん","動物園"],["すいぞくかん","水族館"],
+    ["ぱそこん","パソコン"],["てれび","テレビ"],["れんらく","連絡"],["よやく","予約"],["かいもの","買い物"]
+  ],
+  long: [
+    ["きょうはいいてんきですね","今日はいい天気ですね"],
+    ["おつかれさまでした","お疲れ様でした"],
+    ["よろしくおねがいします","よろしくお願いします"],
+    ["またあしたれんらくします","また明日連絡します"],
+    ["でんしゃがおくれています","電車が遅れています"],
+    ["かいぎはさんじからです","会議は3時からです"],
+    ["ばんごはんなにたべたい","晩ごはん何食べたい"],
+    ["こんしゅうまつあいてますか","今週末空いてますか"],
+    ["しりょうをそうふします","資料を送付します"],
+    ["ごかくにんおねがいします","ご確認お願いします"],
+    ["いまむかっています","今向かっています"],
+    ["すこしおくれそうです","少し遅れそうです"],
+    ["おさきにしつれいします","お先に失礼します"],
+    ["しゅうでんにまにあわなかった","終電に間に合わなかった"],
+    ["らいしゅうのよていをおしえてください","来週の予定を教えてください"],
+    ["きょうのゆうはんはかれーらいす","今日の夕飯はカレーライス"],
+    ["こどもをほいくえんにおくっていく","子供を保育園に送っていく"]
+  ],
+  keitai: [
+    ["きしゅへんこう","機種変更"],["のりかえ","乗り換え"],["かくやすしむ","格安SIM"],["りょうきんぷらん","料金プラン"],
+    ["でーたつうしんりょう","データ通信料"],["かけほうだい","かけ放題"],["いっかつばらい","一括払い"],["ぶんかつばらい","分割払い"],
+    ["したどり","下取り"],["ほしょうさーびす","保証サービス"],["ひかりかいせん","光回線"],["こうじび","工事日"],
+    ["るーたー","ルーター"],["せっとわり","セット割"],["かぞくわり","家族割"],["がくわり","学割"],
+    ["てすうりょう","手数料"],["じむてすうりょう","事務手数料"],["かいやくきん","解約金"],["いやくきん","違約金"],
+    ["めいぎへんこう","名義変更"],["ほんにんかくにん","本人確認"],["みぶんしょうめいしょ","身分証明書"],
+    ["てんとうずみ","店頭済み"],["ざいこかくにん","在庫確認"],["よやくちゅう","予約中"],
+    ["そくじつわたし","即日渡し"],["でーたいこう","データ移行"],["しょきせってい","初期設定"],
+    ["つうしんせいげん","通信制限"],["ぎがほうだい","ギガ放題"],["むせいげんぷらん","無制限プラン"],
+    ["きゃっしゅばっく","キャッシュバック"],["ぽいんとかんげん","ポイント還元"],["とくてん","特典"],["きゃんぺーん","キャンペーン"]
+  ]
+};
+
+const GAME_TIME = 60;
+const STORAGE_KEY = 'flick-dojo-best';
+let mode = 'normal';
+let state = null;
+let composing = false;
+let bestScores = { normal:0, long:0, keitai:0 };
+
+const $ = id => document.getElementById(id);
+const inp = document.getElementById('flick-input');
+
+// ===== ストレージ(localStorage) =====
+function loadBest(){
+  try {
+    const v = localStorage.getItem(STORAGE_KEY);
+    if(v) bestScores = JSON.parse(v);
+  } catch(e){ /* 初回 or 読めない場合は空のまま */ }
+  updateBestLabels();
+}
+function saveBest(){
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(bestScores)); } catch(e){}
+}
+
+function updateBestLabels(){
+  ['normal','long','keitai'].forEach(m=>{
+    $('best-'+m).textContent = bestScores[m] > 0 ? '🏮 自己ベスト: '+bestScores[m] : '';
+  });
+}
+
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $('screen-'+name).classList.add('active');
+}
+
+// ===== ゲーム開始 =====
+function startGame(m){
+  mode = m;
+  state = {
+    score:0, words:0, kana:0, combo:0, maxCombo:0,
+    miss:0, prevTyped:'', lastWord:null,
+    endTime:0, pool:[...WORDS[m]], current:null,
+    wordStart:0, running:false, timerId:null
+  };
+  shuffle(state.pool);
+  $('score').textContent='0';
+  $('word-count').textContent='0';
+  $('miss-count').textContent='0';
+  $('time-left').textContent=GAME_TIME;
+  $('timer-bar').style.width='100%';
+  $('timer-bar').classList.remove('danger');
+  $('combo-display').textContent='';
+  inp.value='';
+  showScreen('game');
+  inp.focus(); // タップ同期コンテキスト内
+  countdown(3);
+}
+
+const CD_TEXT = {3:'参',2:'弐',1:'壱',0:'始め!'};
+function countdown(n){
+  const ov=$('countdown-overlay'), num=$('countdown-num');
+  ov.classList.add('show');
+  num.textContent=CD_TEXT[n];
+  num.classList.toggle('hajime', n===0);
+  num.style.animation='none'; num.offsetHeight; num.style.animation='';
+  if(n>0){ setTimeout(()=>countdown(n-1),800); }
+  else {
+    setTimeout(()=>{ ov.classList.remove('show'); beginPlay(); },600);
+  }
+}
+
+function beginPlay(){
+  state.running=true;
+  state.endTime=Date.now()+GAME_TIME*1000;
+  nextWord();
+  inp.focus();
+  state.timerId=setInterval(tick,200);
+}
+
+function tick(){
+  const remainMs=state.endTime-Date.now();
+  const remain=Math.max(0,remainMs/1000);
+  $('time-left').textContent=Math.ceil(remain);
+  $('timer-bar').style.width=(remain/GAME_TIME*100)+'%';
+  if(remain<=10) $('timer-bar').classList.add('danger');
+  if(remainMs<=0) endGame();
+}
+
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]; } }
+
+function nextWord(){
+  if(state.pool.length===0){
+    state.pool=[...WORDS[mode]]; shuffle(state.pool);
+    const top=state.pool.length-1;
+    if(state.lastWord && state.pool.length>1 && state.pool[top][0]===state.lastWord){
+      [state.pool[0],state.pool[top]]=[state.pool[top],state.pool[0]];
+    }
+  }
+  state.current=state.pool.pop();
+  state.lastWord=state.current[0];
+  state.wordStart=Date.now();
+  state.prevTyped='';
+  $('word-meaning').textContent=state.current[1];
+  renderWord('');
+}
+
+function renderWord(typed){
+  const target=state.current[0];
+  const doneLen=matchLen(typed,target);
+  const isWrong=typed.length>doneLen;
+  $('word-display').innerHTML=
+    '<span class="done">'+esc(target.slice(0,doneLen))+'</span>'+
+    '<span class="'+(isWrong?'wrong-flash':'rest')+'">'+esc(target.slice(doneLen))+'</span>';
+}
+
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+function matchLen(typed, target){
+  let i=0;
+  while(i<typed.length && i<target.length && typed[i]===target[i]) i++;
+  return i;
+}
+
+function norm(s){
+  return s.replace(/[ァ-ヶ]/g, c=>String.fromCharCode(c.charCodeAt(0)-0x60));
+}
+
+function countNewWrong(prev, cur, target){
+  const prevWrong = prev.length - matchLen(prev, target);
+  const curWrong  = cur.length  - matchLen(cur,  target);
+  return Math.max(0, curWrong - prevWrong);
+}
+
+// ===== 入力イベント =====
+inp.addEventListener('compositionstart', ()=>{ composing=true; });
+inp.addEventListener('compositionend',   ()=>{ composing=false; checkInput(); });
+inp.addEventListener('input', ()=>{ if(!composing) checkInput(); });
+
+function checkInput(){
+  if(!state||!state.running) return;
+  const typed=norm(inp.value);
+  const target=state.current[0];
+
+  const addMiss=countNewWrong(state.prevTyped, typed, target);
+  if(addMiss>0){
+    state.miss+=addMiss;
+    $('miss-count').textContent=state.miss;
+    // ミスで連撃が途切れる(道場の掟)
+    if(state.combo>0){
+      state.combo=0;
+      const cd=$('combo-display');
+      cd.innerHTML='<span style="color:#e06c6c;">連撃 途切れ…</span>';
+      clearTimeout(state.comboMsgTimer);
+      state.comboMsgTimer=setTimeout(()=>{
+        if(state.running && state.combo===0) cd.innerHTML='';
+      },600);
+    }
+    missFeedback();
+  }
+  state.prevTyped = typed;
+
+  renderWord(typed);
+  if(typed===target) wordComplete();
+}
+
+function wordComplete(){
+  const target=state.current[0];
+  const elapsed=(Date.now()-state.wordStart)/1000;
+  const kps=target.length/Math.max(elapsed,0.1);
+  let bonus=1, popText='有効', popColor='#ece5d3', ippon=false;
+  if(kps>=2.5){ bonus=2.0; popText='一本!'; popColor='#c73e3a'; ippon=true; }
+  else if(kps>=1.8){ bonus=1.5; popText='技あり!'; popColor='#c9a227'; }
+
+  state.combo++;
+  state.maxCombo=Math.max(state.maxCombo,state.combo);
+  const pts=Math.round(target.length*10*bonus*(1+Math.min(state.combo,10)*0.05));
+  state.score+=pts; state.words++; state.kana+=target.length;
+
+  $('score').textContent=state.score;
+  $('word-count').textContent=state.words;
+  $('combo-display').innerHTML=state.combo>=2?'<span class="big">'+state.combo+'</span> 連撃':'';
+  showSplash(ippon);
+  showPop(popText+' +'+pts,popColor);
+
+  inp.value='';
+  state.prevTyped='';
+  nextWord();
+}
+
+function showSplash(ippon){
+  const s=$('ink-splash');
+  s.classList.toggle('ippon', ippon);
+  s.classList.remove('show'); s.offsetHeight; s.classList.add('show');
+}
+
+function showPop(text,color){
+  const p=$('feedback-pop');
+  p.textContent=text; p.style.color=color;
+  p.classList.remove('show'); p.offsetHeight; p.classList.add('show');
+}
+
+// ===== ミス時演出: 入力欄を一瞬赤く + 軽い揺れ + 「喝!」 =====
+function missFeedback(){
+  inp.classList.remove('miss-shake'); inp.offsetHeight; inp.classList.add('miss-shake');
+  const k=$('katsu');
+  k.classList.remove('show'); k.offsetHeight; k.classList.add('show');
+}
+
+// ===== 段位(柔術式の帯) =====
+const BELTS = [
+  { min:2200, name:'黒帯', color:'#1a1a1a', text:'#ece5d3', comment:'師範代の風格。お客さんの前でドヤれる指さばき' },
+  { min:1500, name:'茶帯', color:'#6b4423', text:'#ece5d3', comment:'かなり速い!実戦で困らぬ腕前なり' },
+  { min:900,  name:'紫帯', color:'#5b3a8c', text:'#ece5d3', comment:'良い動き。日々の稽古で指が覚えてくる' },
+  { min:400,  name:'青帯', color:'#2a5b8c', text:'#ece5d3', comment:'まずまず。濁点・小文字フリックを意識すべし' },
+  { min:0,    name:'白帯', color:'#ece5d3', text:'#16130f', comment:'伸びしろしかない!まずは基本の型から' }
+];
+
+// ===== 終了 =====
+function endGame(){
+  if(!state.running) return;
+  state.running=false;
+  clearInterval(state.timerId);
+
+  const partial = state.current ? matchLen(norm(inp.value), state.current[0]) : 0;
+  const kanaTotal = state.kana + partial;
+
+  inp.blur();
+
+  const kps=(kanaTotal/GAME_TIME).toFixed(2);
+  const totalChars = kanaTotal + state.miss;
+  const acc = totalChars>0 ? Math.round((kanaTotal/totalChars)*100) : 100;
+  const accColor = acc>=95?'#7da87b':acc>=80?'#c9a227':'#c73e3a';
+
+  // 最終スコア = 素点 × 正確率(これがランク・ベスト判定の基準)
+  const rawScore = state.score;
+  const finalScore = Math.round(rawScore * acc / 100);
+
+  const belt = BELTS.find(b=>finalScore>=b.min);
+  const isKuroobi = belt.name==='黒帯';
+
+  $('menjo').classList.toggle('kuroobi', isKuroobi);
+  $('rank-name').textContent=belt.name;
+  $('rank-name').style.color=belt.color==='#1a1a1a'?'#ece5d3':belt.color;
+  const bar=$('belt-bar');
+  bar.style.background=belt.color;
+
+  $('r-score').textContent=finalScore;
+  $('r-breakdown').textContent=rawScore+' × '+acc+'%';
+  $('r-words').textContent=state.words;
+  $('r-kps').textContent=kps;
+  $('r-combo').textContent=state.maxCombo;
+  $('r-acc').textContent=acc+'%';
+  $('r-acc').style.color=accColor;
+  $('r-miss').textContent=state.miss;
+  $('rank-comment').textContent=belt.comment;
+
+  const abar=$('acc-bar');
+  abar.style.width='0%';
+  abar.style.background=accColor;
+  setTimeout(()=>{ abar.style.width=acc+'%'; },100);
+
+  if(finalScore>bestScores[mode]){
+    bestScores[mode]=finalScore;
+    $('new-record').style.display='block';
+    saveBest();
+  } else {
+    $('new-record').style.display='none';
+  }
+  showScreen('result');
+}
+
+function quitGame(){
+  if(state){ state.running=false; clearInterval(state.timerId); }
+  inp.blur();
+  toMenu();
+}
+function retry(){ startGame(mode); }
+function toMenu(){ updateBestLabels(); showScreen('menu'); }
+
+loadBest();
+</script>
+</body>
+</html>
