@@ -373,6 +373,8 @@ const STORAGE_KEY = 'flick-dojo-best';
 let mode = 'normal';
 let state = null;
 let composing = false;
+let countdownTimerId = null;
+let countdownToken = 0;
 let bestScores = { normal:0, long:0, keitai:0 };
 
 const $ = id => document.getElementById(id);
@@ -401,8 +403,23 @@ function showScreen(name){
   $('screen-'+name).classList.add('active');
 }
 
+function clearGameTimers(){
+  countdownToken++;
+  if(countdownTimerId){
+    clearTimeout(countdownTimerId);
+    countdownTimerId=null;
+  }
+  $('countdown-overlay').classList.remove('show');
+  if(state && state.timerId){
+    clearInterval(state.timerId);
+    state.timerId=null;
+  }
+}
+
 // ===== ゲーム開始 =====
 function startGame(m){
+  clearGameTimers();
+  const token = countdownToken;
   mode = m;
   state = {
     score:0, words:0, kana:0, combo:0, maxCombo:0,
@@ -421,23 +438,28 @@ function startGame(m){
   inp.value='';
   showScreen('game');
   window.scrollTo(0, 0);
-  countdown(3);
+  countdown(3, token);
 }
 
 const CD_TEXT = {3:'参',2:'弐',1:'壱',0:'始め!'};
-function countdown(n){
+function countdown(n, token){
+  if(token!==countdownToken || !state) return;
   const ov=$('countdown-overlay'), num=$('countdown-num');
   ov.classList.add('show');
   num.textContent=CD_TEXT[n];
   num.classList.toggle('hajime', n===0);
   num.style.animation='none'; num.offsetHeight; num.style.animation='';
-  if(n>0){ setTimeout(()=>countdown(n-1),800); }
-  else {
-    setTimeout(()=>{ ov.classList.remove('show'); beginPlay(); },600);
-  }
+  const delay = n>0 ? 800 : 600;
+  countdownTimerId=setTimeout(()=>{
+    countdownTimerId=null;
+    if(token!==countdownToken || !state) return;
+    if(n>0) countdown(n-1, token);
+    else { ov.classList.remove('show'); beginPlay(token); }
+  }, delay);
 }
 
-function beginPlay(){
+function beginPlay(token){
+  if(token!==countdownToken || !state) return;
   state.running=true;
   state.endTime=Date.now()+GAME_TIME*1000;
   nextWord();
@@ -637,7 +659,8 @@ function endGame(){
 }
 
 function quitGame(){
-  if(state){ state.running=false; clearInterval(state.timerId); }
+  if(state) state.running=false;
+  clearGameTimers();
   inp.blur();
   toMenu();
 }
