@@ -414,6 +414,10 @@ function clearGameTimers(){
     clearInterval(state.timerId);
     state.timerId=null;
   }
+  if(state && state.comboMsgTimer){
+    clearTimeout(state.comboMsgTimer);
+    state.comboMsgTimer=null;
+  }
 }
 
 // ===== ゲーム開始 =====
@@ -502,7 +506,7 @@ function renderWord(typed){
     '<span class="'+(isWrong?'wrong-flash':'rest')+'">'+esc(target.slice(doneLen))+'</span>';
 }
 
-function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function matchLen(typed, target){
   let i=0;
