@@ -464,6 +464,7 @@ function countdown(n, token){
 
 function beginPlay(token){
   if(token!==countdownToken || !state) return;
+  inp.disabled = false;
   state.running=true;
   state.endTime=Date.now()+GAME_TIME*1000;
   nextWord();
@@ -618,6 +619,7 @@ function endGame(){
   const kanaTotal = state.kana + partial;
 
   inp.blur();
+  inp.disabled = true;
 
   const kps=(kanaTotal/GAME_TIME).toFixed(2);
   const totalChars = kanaTotal + state.miss;
